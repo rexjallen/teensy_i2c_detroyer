@@ -368,11 +368,11 @@ void IMX_RT1060_I2CSlave::listen(uint16_t address) {
 
     // Set the Slave Address
     port->SAMR = address << 1U;
-    // Enable clock stretching
-    port->SCFGR1 |= (LPI2C_SCFGR1_TXDSTALL | LPI2C_SCFGR1_RXSTALL);
+    // Enable clock stretching //RJA: or not
+    // port->SCFGR1 |= (LPI2C_SCFGR1_TXDSTALL | LPI2C_SCFGR1_RXSTALL);
     // Set up interrupts
     attachInterruptVector(config.irq, isr);
-    port->SIER |= (LPI2C_SIER_RSIE | LPI2C_SIER_SDIE | LPI2C_SIER_TDIE | LPI2C_SIER_RDIE);
+    port->SIER |= (LPI2C_SIER_AM0IE | LPI2C_SIER_RSIE | LPI2C_SIER_SDIE | LPI2C_SIER_TDIE | LPI2C_SIER_RDIE); //RJA added AMO interrupt
     NVIC_ENABLE_IRQ(config.irq);
 
     // Enable Slave Mode
@@ -412,6 +412,9 @@ void IMX_RT1060_I2CSlave::_interrupt_service_routine() {
 
     if (ssr & LPI2C_SSR_AM0F) {
         port->SASR; // Read SASR to clear to the address flag. (Just for neatness)
+		if (after_receive_callback) { //RJA: moving this to AMO interrupt handler
+            after_receive_callback(rx_buffer.get_bytes_transferred());
+        }
     }
 
     if (ssr & (LPI2C_SSR_RSF | LPI2C_SSR_SDF)) {
@@ -503,9 +506,9 @@ void IMX_RT1060_I2CSlave::_interrupt_service_routine() {
 // Called from within the ISR when we receive a Repeated START or STOP
 void IMX_RT1060_I2CSlave::end_of_frame() {
     if (state == State::receiving) {
-        if (after_receive_callback) {
-            after_receive_callback(rx_buffer.get_bytes_transferred());
-        }
+//        if (after_receive_callback) { //RJA: moving this to AMO interrupt handler
+//            after_receive_callback(rx_buffer.get_bytes_transferred());
+//        }
     } else if (state == State::transmitting) {
         trailing_byte_sent = false;
         if (after_transmit_callback) {
